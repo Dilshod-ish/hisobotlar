@@ -11,19 +11,28 @@ THREAD_ID  = int(os.environ.get("TELEGRAM_THREAD_ID", "1885"))
 _KEY = re.compile(r'^\d+(\.\d+)*$')
 
 def read_sheet():
-    base = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv"
+    base = (f"https://docs.google.com/spreadsheets/d/"
+            f"{SPREADSHEET_ID}/export?format=csv")
     data = {}
-    for gid in range(3):
-        r = requests.get(f"{base}&gid={gid}", timeout=30)
-        if r.status_code != 200:
-            break
-        for row in csv.reader(io.StringIO(r.text)):
-            key = row[0].strip() if row else ""
-            val = row[2].strip() if len(row) >= 3 else ""
-            if _KEY.match(key):
-                data[key] = val
+    r = requests.get(f"{base}&gid=0", timeout=30)
+    if r.status_code != 200 or r.text.strip().startswith('<'):
+        raise RuntimeError(
+            f"Sheet yopiq (status={r.status_code}). "
+            "Share -> Anyone with the link -> Viewer qiling."
+        )
+    for row in csv.reader(io.StringIO(r.text)):
+        # AKTIV: A ustun (0) va C ustun (2)
+        k0 = row[0].strip() if len(row) > 0 else ""
+        v0 = row[2].strip() if len(row) > 2 else ""
+        if _KEY.match(k0):
+            data[k0] = v0
+        # PASSIV: E ustun (4) va G ustun (6)
+        k4 = row[4].strip() if len(row) > 4 else ""
+        v6 = row[6].strip() if len(row) > 6 else ""
+        if _KEY.match(k4):
+            data[k4] = v6
     if not data:
-        raise RuntimeError("Sheet'dan ma'lumot o'qib bo'lmadi. Share -> Anyone with link -> Viewer qiling.")
+        raise RuntimeError("Ma'lumot topilmadi.")
     return data
 
 def cell(data, key):
@@ -33,7 +42,7 @@ def cell(data, key):
     return s, "positive"
 
 def to_float(s):
-    try: return float(s.replace(" ","").replace(",","."))
+    try: return float(s.replace("\u00a0","").replace(" ","").replace(",","."))
     except: return 0.0
 
 def to_str(f):
