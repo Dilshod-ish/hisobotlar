@@ -12,7 +12,7 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID:   "-1002646062763"
       TELEGRAM_THREAD_ID: "1885"
-
+      GOOGLE_API_KEY:     ${{ secrets.GOOGLE_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
