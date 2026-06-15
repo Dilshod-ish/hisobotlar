@@ -1,0 +1,30 @@
+name: Daily Balans Report
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID:   "-1002646062763"
+      TELEGRAM_THREAD_ID: "1885"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pytz requests playwright
+
+      - name: Install Chromium
+        run: python -m playwright install chromium --with-deps
+
+      - name: Run report
+        run: python scripts/daily_report.py
