@@ -11,23 +11,25 @@ THREAD_ID  = int(os.environ.get("TELEGRAM_THREAD_ID", "1885"))
 _KEY = re.compile(r'^\d+(\.\d+)*$')
 
 def read_sheet():
-    base = (f"https://docs.google.com/spreadsheets/d/"
-            f"{SPREADSHEET_ID}/export?format=csv")
-    r = requests.get(f"{base}&gid=0", timeout=30)
-    if r.status_code != 200 or r.text.strip().startswith('<'):
-        raise RuntimeError(f"Sheet yopiq (status={r.status_code}).")
+    api_key = os.environ["GOOGLE_API_KEY"]
+    url = (f"https://sheets.googleapis.com/v4/spreadsheets/"
+           f"{SPREADSHEET_ID}/values/A:G?key={api_key}")
+    r = requests.get(url, timeout=30)
+    if r.status_code != 200:
+        raise RuntimeError(
+            f"Sheets API xato {r.status_code}: {r.text[:300]}"
+        )
     data = {}
-    for row in csv.reader(io.StringIO(r.text)):
-        k0 = row[0].strip() if len(row) > 0 else ""
-        v0 = row[2].strip() if len(row) > 2 else ""
+    for row in r.json().get("values", []):
+        row += [""] * max(0, 7 - len(row))
+        k0, v0 = row[0].strip(), row[2].strip()
         if _KEY.match(k0):
             data[k0] = v0
-        k4 = row[4].strip() if len(row) > 4 else ""
-        v6 = row[6].strip() if len(row) > 6 else ""
+        k4, v6 = row[4].strip(), row[6].strip()
         if _KEY.match(k4):
             data[k4] = v6
     if not data:
-        raise RuntimeError("Ma'lumot topilmadi.")
+        raise RuntimeError("Ma'lumot topilmadi")
     return data
 
 def cell(data, key):
