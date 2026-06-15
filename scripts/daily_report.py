@@ -14,7 +14,7 @@ def read_sheet():
     base = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv"
     data = {}
     for gid in range(3):
-        r = requests.get(f"{base}&gid={gid}", timeout=30, allow_redirects=False)
+        r = requests.get(f"{base}&gid={gid}", timeout=30)
         if r.status_code != 200:
             break
         for row in csv.reader(io.StringIO(r.text)):
