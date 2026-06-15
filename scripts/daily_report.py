@@ -13,20 +13,15 @@ _KEY = re.compile(r'^\d+(\.\d+)*$')
 def read_sheet():
     base = (f"https://docs.google.com/spreadsheets/d/"
             f"{SPREADSHEET_ID}/export?format=csv")
-    data = {}
     r = requests.get(f"{base}&gid=0", timeout=30)
     if r.status_code != 200 or r.text.strip().startswith('<'):
-        raise RuntimeError(
-            f"Sheet yopiq (status={r.status_code}). "
-            "Share -> Anyone with the link -> Viewer qiling."
-        )
+        raise RuntimeError(f"Sheet yopiq (status={r.status_code}).")
+    data = {}
     for row in csv.reader(io.StringIO(r.text)):
-        # AKTIV: A ustun (0) va C ustun (2)
         k0 = row[0].strip() if len(row) > 0 else ""
         v0 = row[2].strip() if len(row) > 2 else ""
         if _KEY.match(k0):
             data[k0] = v0
-        # PASSIV: E ustun (4) va G ustun (6)
         k4 = row[4].strip() if len(row) > 4 else ""
         v6 = row[6].strip() if len(row) > 6 else ""
         if _KEY.match(k4):
