@@ -75,6 +75,46 @@ def read_table(tab: str) -> list[dict]:
     return result
 
 
+def read_debitorlar(tab: str) -> tuple[list[dict], list[tuple], list[tuple]]:
+    """
+    A:C — S/T/G xulosa qatorlari
+    A:L — juft ustunlarda (ism, summa) individual debitorlar:
+          (A,B), (C,D)             → Mijozlar      (1-2 juft)
+          (E,F), (G,H), (I,J), (K,L) → Ta'minotchilar (3-6 juft)
+    Qaytaradi: (xulosa_qatorlari, mijozlar, taminotchilar)
+    """
+    rows = fetch(f"'{tab}'!A:L")
+    summary = []
+    mijozlar = []
+    taminotchilar = []
+
+    for row in rows:
+        while len(row) < 12:
+            row.append("")
+        marker = row[0].strip().upper()
+
+        if marker in ("S", "T", "G"):
+            name, val = row[1].strip(), row[2].strip()
+            if name:
+                summary.append({
+                    "type": {"S": "section", "T": "subtotal", "G": "total"}[marker],
+                    "name": name,
+                    "value": val,
+                })
+        else:
+            # (E,F)=4, (G,H)=6 → Mijozlar; (I,J)=8, (K,L)=10 → Ta'minotchilar
+            for col_idx, target in [(4, mijozlar), (6, mijozlar),
+                                    (8, taminotchilar), (10, taminotchilar)]:
+                name = row[col_idx].strip() if col_idx < len(row) else ""
+                val  = row[col_idx + 1].strip() if col_idx + 1 < len(row) else ""
+                if name and val:
+                    target.append((name, to_float(val)))
+
+    mijozlar.sort(key=lambda x: x[1])
+    taminotchilar.sort(key=lambda x: x[1])
+    return summary, mijozlar, taminotchilar
+
+
 # ── Formatting ────────────────────────────────────────────────────────────────
 
 def to_float(s: str) -> float:
@@ -170,6 +210,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial
 .debitor .card-footer { background: #e3f2fd; }
 .debitor .footer-total { color: #1565c0; }
 .debitor .row-value.positive { color: #1565c0; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.col-title { padding: 10px 16px; font-size: 14px; font-weight: 700; border-bottom: 1px solid #e3f2fd; color: #1565c0; }
+.mijozlar .row-value.positive  { color: #c62828; }
+.mijozlar .row-value.negative  { color: #1565c0; }
 .date { font-size: 11px; color: #bbb; text-align: right; margin-top: 10px; }
 """
 
@@ -324,6 +368,96 @@ def generate_table_html(title: str, subtitle: str, icon: str,
 </div></body></html>"""
 
 
+def _debtor_col_rows(entries: list[tuple]) -> str:
+    neg = [(n, v) for n, v in entries if v < 0]
+    pos = [(n, v) for n, v in entries if v > 0]
+    html = ""
+    if neg:
+        html += '<div class="section-row">Qarzlar</div>\n'
+        for name, val in neg:
+            html += (f'<div class="row sub">'
+                     f'<span class="row-label">{name}</span>'
+                     f'<span class="row-value negative">{to_str(val)}</span>'
+                     f'</div>\n')
+    if pos:
+        html += '<div class="section-row">Debitorlar</div>\n'
+        for name, val in sorted(pos, reverse=True):
+            html += (f'<div class="row sub">'
+                     f'<span class="row-label">{name}</span>'
+                     f'<span class="row-value positive">{to_str(val)}</span>'
+                     f'</div>\n')
+    if not html:
+        html = '<div class="row sub"><span class="row-label" style="color:#bbb">Ma\'lumot yo\'q</span></div>\n'
+    return html
+
+
+def _mijoz_col_rows(entries: list[tuple]) -> str:
+    # Manfiy = qarz (+ ko'rsatiladi), musbat = avans (- ko'rsatiladi)
+    neg = [(n, v) for n, v in entries if v < 0]
+    pos = [(n, v) for n, v in entries if v > 0]
+    html = ""
+    if neg:
+        html += '<div class="section-row">Qarzlar</div>\n'
+        for name, val in neg:
+            html += (f'<div class="row sub">'
+                     f'<span class="row-label">{name}</span>'
+                     f'<span class="row-value negative">{to_str(-val)}</span>'
+                     f'</div>\n')
+    if pos:
+        html += '<div class="section-row">Avans</div>\n'
+        for name, val in sorted(pos, reverse=True):
+            html += (f'<div class="row sub">'
+                     f'<span class="row-label">{name}</span>'
+                     f'<span class="row-value positive">{to_str(-val)}</span>'
+                     f'</div>\n')
+    if not html:
+        html = '<div class="row sub"><span class="row-label" style="color:#bbb">Ma\'lumot yo\'q</span></div>\n'
+    return html
+
+
+def generate_debitorlar_html(summary: list[dict], mijozlar: list[tuple],
+                             taminotchilar: list[tuple], time_str: str) -> str:
+    total_item = next((i for i in summary if i["type"] == "total"), None)
+    total_val  = to_str(to_float(total_item["value"])) if total_item else "—"
+    total_name = total_item["name"] if total_item else "JAMI DEBITORLAR"
+    summary_rows = [i for i in summary if i["type"] != "total"]
+
+    total_count = len(mijozlar) + len(taminotchilar)
+
+    return f"""<!DOCTYPE html>
+<html lang="uz">
+<head><meta charset="UTF-8"><title>Debitorlar hisoboti</title>
+<style>{CSS}</style></head>
+<body><div class="container">
+  <div class="header">
+    <div class="header-icon">👥</div>
+    <div class="header-text">
+      <h1>Debitorlar hisoboti</h1>
+      <p>Mijozlar · Ta'minotchilar · Boshqa &nbsp;|&nbsp; Valyuta: UZS</p>
+    </div>
+  </div>
+  <div class="card debitor" style="margin-bottom:16px">
+    <div class="card-title">👥 Xulosa</div>
+    {_table_rows(summary_rows)}
+    <div class="card-footer">
+      <span class="footer-label">{total_name}</span>
+      <span class="footer-total">{total_val}</span>
+    </div>
+  </div>
+  <div class="two-col">
+    <div class="card debitor mijozlar">
+      <div class="card-title">👤 Mijozlar ({len(mijozlar)} ta)</div>
+      {_mijoz_col_rows(mijozlar)}
+    </div>
+    <div class="card debitor">
+      <div class="card-title">🏭 Ta'minotchilar ({len(taminotchilar)} ta)</div>
+      {_debtor_col_rows(taminotchilar)}
+    </div>
+  </div>
+  <div class="date">Oxirgi yangilanish: {time_str}</div>
+</div></body></html>"""
+
+
 # ── Screenshot ────────────────────────────────────────────────────────────────
 
 def take_screenshot(html: str) -> str:
@@ -391,17 +525,15 @@ def main():
     print(f"   {len(mahsulotlar)} ta qator")
 
     print("👥 Debitorlar o'qilmoqda...")
-    debitorlar = read_table(TAB_DEBITORLAR)
-    print(f"   {len(debitorlar)} ta qator")
+    d_summary, d_mijozlar, d_taminotchilar = read_debitorlar(TAB_DEBITORLAR)
+    print(f"   {len(d_summary)} xulosa + {len(d_mijozlar)} mijoz + {len(d_taminotchilar)} ta'minotchi")
 
     print("🖼  HTML generatsiya qilinmoqda...")
     html1 = generate_balans_html(balans, time_str)
     html2 = generate_table_html(
         "Mahsulotlar hisoboti", "Omborxona · Yo'ldagilar",
         "📦", "mahsulot", mahsulotlar, time_str)
-    html3 = generate_table_html(
-        "Debitorlar hisoboti", "Mijozlar · Ta'minotchilar · Boshqa",
-        "👥", "debitor", debitorlar, time_str)
+    html3 = generate_debitorlar_html(d_summary, d_mijozlar, d_taminotchilar, time_str)
 
     print("📸 Screenshots olinmoqda...")
     paths = [take_screenshot(h) for h in [html1, html2, html3]]
