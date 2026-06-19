@@ -369,19 +369,23 @@ def generate_table_html(title: str, subtitle: str, icon: str,
 
 
 def _debtor_col_rows(entries: list[tuple]) -> str:
-    neg = [(n, v) for n, v in entries if v < 0]
-    pos = [(n, v) for n, v in entries if v > 0]
+    neg = sorted([(n, v) for n, v in entries if v < 0], key=lambda x: x[1])       # eng manfiy → 1-o'rinda
+    pos = sorted([(n, v) for n, v in entries if v > 0], key=lambda x: x[1], reverse=True)  # eng musbat → 1-o'rinda
     html = ""
     if neg:
-        html += '<div class="section-row">Qarzlar</div>\n'
-        for name, val in neg:
+        top = neg[:10]
+        label = f"Qarzlar (top {len(top)})" if len(neg) > 10 else "Qarzlar"
+        html += f'<div class="section-row">{label}</div>\n'
+        for name, val in top:
             html += (f'<div class="row sub">'
                      f'<span class="row-label">{name}</span>'
                      f'<span class="row-value negative">{to_str(val)}</span>'
                      f'</div>\n')
     if pos:
-        html += '<div class="section-row">Debitorlar</div>\n'
-        for name, val in sorted(pos, reverse=True):
+        top = pos[:10]
+        label = f"Debitorlar (top {len(top)})" if len(pos) > 10 else "Debitorlar"
+        html += f'<div class="section-row">{label}</div>\n'
+        for name, val in top:
             html += (f'<div class="row sub">'
                      f'<span class="row-label">{name}</span>'
                      f'<span class="row-value positive">{to_str(val)}</span>'
@@ -393,19 +397,23 @@ def _debtor_col_rows(entries: list[tuple]) -> str:
 
 def _mijoz_col_rows(entries: list[tuple]) -> str:
     # Manfiy = qarz (+ ko'rsatiladi), musbat = avans (- ko'rsatiladi)
-    neg = [(n, v) for n, v in entries if v < 0]
-    pos = [(n, v) for n, v in entries if v > 0]
+    neg = sorted([(n, v) for n, v in entries if v < 0], key=lambda x: x[1])       # eng manfiy → 1-o'rinda
+    pos = sorted([(n, v) for n, v in entries if v > 0], key=lambda x: x[1], reverse=True)  # eng musbat → 1-o'rinda
     html = ""
     if neg:
-        html += '<div class="section-row">Qarzlar</div>\n'
-        for name, val in neg:
+        top = neg[:10]
+        label = f"Qarzlar (top {len(top)})" if len(neg) > 10 else "Qarzlar"
+        html += f'<div class="section-row">{label}</div>\n'
+        for name, val in top:
             html += (f'<div class="row sub">'
                      f'<span class="row-label">{name}</span>'
                      f'<span class="row-value negative">{to_str(-val)}</span>'
                      f'</div>\n')
     if pos:
-        html += '<div class="section-row">Avans</div>\n'
-        for name, val in sorted(pos, reverse=True):
+        top = pos[:10]
+        label = f"Avans (top {len(top)})" if len(pos) > 10 else "Avans"
+        html += f'<div class="section-row">{label}</div>\n'
+        for name, val in top:
             html += (f'<div class="row sub">'
                      f'<span class="row-label">{name}</span>'
                      f'<span class="row-value positive">{to_str(-val)}</span>'
