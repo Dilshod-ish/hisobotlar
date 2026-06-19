@@ -77,6 +77,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans
 .row-value { font-size:13.5px; font-weight:600; font-family:monospace; color:#555; min-width:110px; text-align:right; }
 .row-value.positive { color:#2e7d32; }
 .row-value.zero { color:#bbb; }
+.passiv .row-value.positive { color: #c62828; }
 .card-footer { padding:12px 20px; display:flex; justify-content:space-between; align-items:center; border-top:2px solid #eee; }
 .aktiv .card-footer { background:#f1faf2; }
 .passiv .card-footer { background:#fff5f7; }
