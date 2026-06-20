@@ -461,18 +461,18 @@ def generate_mahsulotlar_html(items: list[dict], sotilganlar: dict,
   </div>
   <div class="two-col">
     <div class="card sotilgan">
-      <div class="card-title">🚂 Sotilganlar</div>
+      <div class="card-title">🚂 Sotilmaganlar</div>
       {_group_col_html(sotilganlar)}
       <div class="card-footer">
-        <span class="footer-label">Jami sotilgan</span>
+        <span class="footer-label">Jami sotilmagan</span>
         <span class="footer-total">{to_str(s_total)}</span>
       </div>
     </div>
     <div class="card sotilmagan">
-      <div class="card-title">📦 Sotilmaganlar</div>
+      <div class="card-title">📦 Sotilganlar</div>
       {_group_col_html(sotilmaganlar)}
       <div class="card-footer">
-        <span class="footer-label">Jami sotilmagan</span>
+        <span class="footer-label">Jami sotilgan</span>
         <span class="footer-total">{to_str(ns_total)}</span>
       </div>
     </div>
