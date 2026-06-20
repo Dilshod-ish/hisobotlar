@@ -75,6 +75,31 @@ def read_table(tab: str) -> list[dict]:
     return result
 
 
+def read_mahsulotlar_detail(tab: str) -> tuple[dict, dict]:
+    """
+    F:H — Sotilganlar: F=mahsulot (group), G=vagon nomi, H=summa
+    L:N — Sotilmaganlar: L=mahsulot (group), M=vagon nomi, N=summa
+    Qaytaradi: (sotilganlar, sotilmaganlar) — {guruh: [(vagon, summa), ...]}
+    """
+    rows = fetch(f"'{tab}'!A:N")
+    sotilganlar: dict[str, list] = {}
+    sotilmaganlar: dict[str, list] = {}
+
+    for row in rows:
+        while len(row) < 14:
+            row.append("")
+        # Sotilganlar: F=5, G=6, H=7
+        f_grp, g_vag, h_sum = row[5].strip(), row[6].strip(), row[7].strip()
+        if f_grp and g_vag and h_sum:
+            sotilganlar.setdefault(f_grp, []).append((g_vag, to_float(h_sum)))
+        # Sotilmaganlar: L=11, M=12, N=13
+        l_grp, m_vag, n_sum = row[11].strip(), row[12].strip(), row[13].strip()
+        if l_grp and m_vag and n_sum:
+            sotilmaganlar.setdefault(l_grp, []).append((m_vag, to_float(n_sum)))
+
+    return sotilganlar, sotilmaganlar
+
+
 def read_debitorlar(tab: str) -> tuple[list[dict], list[tuple], list[tuple], list[tuple]]:
     """
     A:C — S/T/G xulosa qatorlari
@@ -208,6 +233,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial
 .mahsulot .section-row { background: #f1faf2; color: #2e7d32; }
 .mahsulot .card-footer { background: #f1faf2; }
 .mahsulot .footer-total { color: #2e7d32; }
+.sotilgan .card-title  { background: #fff3e0; color: #e65100; }
+.sotilgan .section-row { background: #fff8f0; color: #e65100; }
+.sotilgan .card-footer { background: #fff8f0; }
+.sotilgan .footer-total { color: #e65100; }
+.sotilgan .row-value.positive { color: #e65100; }
+.sotilmagan .card-title  { background: #e8f5e9; color: #2e7d32; }
+.sotilmagan .section-row { background: #f1faf2; color: #2e7d32; }
+.sotilmagan .card-footer { background: #f1faf2; }
+.sotilmagan .footer-total { color: #2e7d32; }
+.sotilmagan .row-value.positive { color: #2e7d32; }
+.group-total { padding: 6px 20px 6px 36px; border-bottom: 1px solid #eee;
+               display: flex; justify-content: space-between; background: #f5f5f5; }
+.group-total span { font-size: 12px; font-weight: 700; color: #777; font-family: monospace; }
 .debitor .card-title  { background: #e3f2fd; color: #1565c0; }
 .debitor .section-row { background: #e8f4fd; color: #1565c0; }
 .debitor .card-footer { background: #e3f2fd; }
@@ -343,6 +381,24 @@ def _table_rows(items: list[dict]) -> str:
     return html
 
 
+def _group_col_html(groups: dict) -> str:
+    if not groups:
+        return '<div class="row sub"><span class="row-label" style="color:#bbb">Ma\'lumot yo\'q</span></div>\n'
+    html = ""
+    for grp_name, items in groups.items():
+        grp_total = sum(v for _, v in items)
+        html += f'<div class="section-row">{grp_name}</div>\n'
+        for vagon, summa in items:
+            html += (f'<div class="row sub">'
+                     f'<span class="row-label">{vagon}</span>'
+                     f'<span class="row-value positive">{to_str(summa)}</span>'
+                     f'</div>\n')
+        html += (f'<div class="group-total">'
+                 f'<span>Jami</span><span>{to_str(grp_total)}</span>'
+                 f'</div>\n')
+    return html
+
+
 def generate_table_html(title: str, subtitle: str, icon: str,
                         theme: str, items: list[dict], time_str: str) -> str:
     total_item = next((i for i in items if i["type"] == "total"), None)
@@ -368,6 +424,57 @@ def generate_table_html(title: str, subtitle: str, icon: str,
     <div class="card-footer">
       <span class="footer-label">{total_name}</span>
       <span class="footer-total">{total_val}</span>
+    </div>
+  </div>
+  <div class="date">Oxirgi yangilanish: {time_str}</div>
+</div></body></html>"""
+
+
+def generate_mahsulotlar_html(items: list[dict], sotilganlar: dict,
+                               sotilmaganlar: dict, time_str: str) -> str:
+    total_item = next((i for i in items if i["type"] == "total"), None)
+    total_val  = to_str(to_float(total_item["value"])) if total_item else "—"
+    total_name = total_item["name"] if total_item else "JAMI MAHSULOTLAR"
+    main_items = [i for i in items if i["type"] != "total"]
+    s_total  = sum(v for grp in sotilganlar.values()   for _, v in grp)
+    ns_total = sum(v for grp in sotilmaganlar.values() for _, v in grp)
+
+    return f"""<!DOCTYPE html>
+<html lang="uz">
+<head><meta charset="UTF-8"><title>Mahsulotlar hisoboti</title>
+<style>{CSS}</style></head>
+<body><div class="container">
+  <div class="header">
+    <div class="header-icon">📦</div>
+    <div class="header-text">
+      <h1>Mahsulotlar hisoboti</h1>
+      <p>Omborxona · Yo'ldagilar &nbsp;|&nbsp; Valyuta: UZS</p>
+    </div>
+  </div>
+  <div class="card mahsulot" style="margin-bottom:16px">
+    <div class="card-title">📦 Mahsulotlar hisoboti</div>
+    {_table_rows(main_items)}
+    <div class="card-footer">
+      <span class="footer-label">{total_name}</span>
+      <span class="footer-total">{total_val}</span>
+    </div>
+  </div>
+  <div class="two-col">
+    <div class="card sotilgan">
+      <div class="card-title">🚂 Sotilganlar</div>
+      {_group_col_html(sotilganlar)}
+      <div class="card-footer">
+        <span class="footer-label">Jami sotilgan</span>
+        <span class="footer-total">{to_str(s_total)}</span>
+      </div>
+    </div>
+    <div class="card sotilmagan">
+      <div class="card-title">📦 Sotilmaganlar</div>
+      {_group_col_html(sotilmaganlar)}
+      <div class="card-footer">
+        <span class="footer-label">Jami sotilmagan</span>
+        <span class="footer-total">{to_str(ns_total)}</span>
+      </div>
     </div>
   </div>
   <div class="date">Oxirgi yangilanish: {time_str}</div>
@@ -536,7 +643,8 @@ def main():
 
     print("📦 Mahsulotlar o'qilmoqda...")
     mahsulotlar = read_table(TAB_MAHSULOTLAR)
-    print(f"   {len(mahsulotlar)} ta qator")
+    sotilganlar, sotilmaganlar = read_mahsulotlar_detail(TAB_MAHSULOTLAR)
+    print(f"   {len(mahsulotlar)} ta qator, {len(sotilganlar)} guruh sotilgan, {len(sotilmaganlar)} guruh sotilmagan")
 
     print("👥 Debitorlar o'qilmoqda...")
     d_summary, d_mijozlar, d_t_avans, d_t_qarz = read_debitorlar(TAB_DEBITORLAR)
@@ -544,9 +652,7 @@ def main():
 
     print("🖼  HTML generatsiya qilinmoqda...")
     html1 = generate_balans_html(balans, time_str)
-    html2 = generate_table_html(
-        "Mahsulotlar hisoboti", "Omborxona · Yo'ldagilar",
-        "📦", "mahsulot", mahsulotlar, time_str)
+    html2 = generate_mahsulotlar_html(mahsulotlar, sotilganlar, sotilmaganlar, time_str)
     html3 = generate_debitorlar_html(d_summary, d_mijozlar, d_t_avans, d_t_qarz, time_str)
 
     print("📸 Screenshots olinmoqda...")
