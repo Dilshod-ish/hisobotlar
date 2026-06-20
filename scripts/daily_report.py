@@ -75,18 +75,20 @@ def read_table(tab: str) -> list[dict]:
     return result
 
 
-def read_debitorlar(tab: str) -> tuple[list[dict], list[tuple], list[tuple]]:
+def read_debitorlar(tab: str) -> tuple[list[dict], list[tuple], list[tuple], list[tuple]]:
     """
     A:C — S/T/G xulosa qatorlari
-    A:L — juft ustunlarda (ism, summa) individual debitorlar:
-          (A,B), (C,D)             → Mijozlar      (1-2 juft)
-          (E,F), (G,H), (I,J), (K,L) → Ta'minotchilar (3-6 juft)
-    Qaytaradi: (xulosa_qatorlari, mijozlar, taminotchilar)
+    E:F, G:H → Mijozlar
+    I:J      → Ta'minotchilar avans
+    K:L      → Ta'minotchilar qarz
+    Qaytaradi: (xulosa_qatorlari, mijozlar, taminot_avans, taminot_qarz)
     """
     rows = fetch(f"'{tab}'!A:L")
     summary = []
     mijozlar = []
-    taminotchilar = []
+    taminot_avans = []
+    taminot_qarz  = []
+    current_group = None
 
     for row in rows:
         while len(row) < 12:
@@ -96,23 +98,24 @@ def read_debitorlar(tab: str) -> tuple[list[dict], list[tuple], list[tuple]]:
         if marker in ("S", "T", "G"):
             name, val = row[1].strip(), row[2].strip()
             if name:
+                if marker == "S":
+                    current_group = "mijoz" if "mijoz" in name.lower() else "taminot"
                 summary.append({
                     "type": {"S": "section", "T": "subtotal", "G": "total"}[marker],
                     "name": name,
                     "value": val,
+                    "group": current_group,
                 })
         else:
-            # (E,F)=4, (G,H)=6 → Mijozlar; (I,J)=8, (K,L)=10 → Ta'minotchilar
             for col_idx, target in [(4, mijozlar), (6, mijozlar),
-                                    (8, taminotchilar), (10, taminotchilar)]:
+                                    (8, taminot_avans), (10, taminot_qarz)]:
                 name = row[col_idx].strip() if col_idx < len(row) else ""
                 val  = row[col_idx + 1].strip() if col_idx + 1 < len(row) else ""
                 if name and val:
                     target.append((name, to_float(val)))
 
     mijozlar.sort(key=lambda x: x[1])
-    taminotchilar.sort(key=lambda x: x[1])
-    return summary, mijozlar, taminotchilar
+    return summary, mijozlar, taminot_avans, taminot_qarz
 
 
 # ── Formatting ────────────────────────────────────────────────────────────────
@@ -322,17 +325,20 @@ def _table_rows(items: list[dict]) -> str:
     for item in items:
         if item["type"] == "section":
             html += f'<div class="section-row">{item["name"]}</div>\n'
-        elif item["type"] == "item":
-            val, cls = fmt(item["value"])
-            html += (f'<div class="row sub">'
-                     f'<span class="row-label">{item["name"]}</span>'
-                     f'<span class="row-value {cls}">{val}</span>'
-                     f'</div>\n')
-        elif item["type"] == "subtotal":
-            val, cls = fmt(item["value"])
-            html += (f'<div class="row">'
-                     f'<span class="row-label"><b>{item["name"]}</b></span>'
-                     f'<span class="row-value {cls}">{val}</span>'
+        elif item["type"] in ("item", "subtotal"):
+            flip = item.get("group") == "mijoz"
+            f_val = to_float(item["value"])
+            if flip:
+                # Mijozlar: manfiy=qarz(+,ko'k), musbat=avans(-,qizil)
+                disp = to_str(-f_val) if f_val != 0 else "—"
+                cls  = "negative" if f_val > 0 else ("positive" if f_val < 0 else "zero")
+            else:
+                disp, cls = fmt(item["value"])
+            row_cls = "row sub" if item["type"] == "item" else "row"
+            name    = f'<b>{item["name"]}</b>' if item["type"] == "subtotal" else item["name"]
+            html += (f'<div class="{row_cls}">'
+                     f'<span class="row-label">{name}</span>'
+                     f'<span class="row-value {cls}">{disp}</span>'
                      f'</div>\n')
     return html
 
@@ -368,27 +374,27 @@ def generate_table_html(title: str, subtitle: str, icon: str,
 </div></body></html>"""
 
 
-def _debtor_col_rows(entries: list[tuple]) -> str:
-    neg = sorted([(n, v) for n, v in entries if v < 0], key=lambda x: x[1])       # eng manfiy → 1-o'rinda
-    pos = sorted([(n, v) for n, v in entries if v > 0], key=lambda x: x[1], reverse=True)  # eng musbat → 1-o'rinda
+def _taminot_col_rows(avans: list[tuple], qarz: list[tuple]) -> str:
+    # Avans (I:J): + ishora, ko'k rang
+    s_avans = sorted(avans, key=lambda x: abs(x[1]), reverse=True)[:10]
+    # Qarz (K:L): - ishora, qizil rang
+    s_qarz  = sorted(qarz,  key=lambda x: abs(x[1]), reverse=True)[:10]
     html = ""
-    if neg:
-        top = neg[:10]
-        label = f"Qarzlar (top {len(top)})" if len(neg) > 10 else "Qarzlar"
+    if s_avans:
+        label = f"Avans (top {len(s_avans)})" if len(avans) > 10 else "Avans"
         html += f'<div class="section-row">{label}</div>\n'
-        for name, val in top:
+        for name, val in s_avans:
             html += (f'<div class="row sub">'
                      f'<span class="row-label">{name}</span>'
-                     f'<span class="row-value negative">{to_str(val)}</span>'
+                     f'<span class="row-value positive">{to_str(abs(val))}</span>'
                      f'</div>\n')
-    if pos:
-        top = pos[:10]
-        label = f"Debitorlar (top {len(top)})" if len(pos) > 10 else "Debitorlar"
+    if s_qarz:
+        label = f"Qarzlar (top {len(s_qarz)})" if len(qarz) > 10 else "Qarzlar"
         html += f'<div class="section-row">{label}</div>\n'
-        for name, val in top:
+        for name, val in s_qarz:
             html += (f'<div class="row sub">'
                      f'<span class="row-label">{name}</span>'
-                     f'<span class="row-value positive">{to_str(val)}</span>'
+                     f'<span class="row-value negative">{to_str(-abs(val))}</span>'
                      f'</div>\n')
     if not html:
         html = '<div class="row sub"><span class="row-label" style="color:#bbb">Ma\'lumot yo\'q</span></div>\n'
@@ -424,13 +430,13 @@ def _mijoz_col_rows(entries: list[tuple]) -> str:
 
 
 def generate_debitorlar_html(summary: list[dict], mijozlar: list[tuple],
-                             taminotchilar: list[tuple], time_str: str) -> str:
+                             taminot_avans: list[tuple], taminot_qarz: list[tuple],
+                             time_str: str) -> str:
     total_item = next((i for i in summary if i["type"] == "total"), None)
     total_val  = to_str(to_float(total_item["value"])) if total_item else "—"
     total_name = total_item["name"] if total_item else "JAMI DEBITORLAR"
     summary_rows = [i for i in summary if i["type"] != "total"]
-
-    total_count = len(mijozlar) + len(taminotchilar)
+    t_count = len(taminot_avans) + len(taminot_qarz)
 
     return f"""<!DOCTYPE html>
 <html lang="uz">
@@ -458,8 +464,8 @@ def generate_debitorlar_html(summary: list[dict], mijozlar: list[tuple],
       {_mijoz_col_rows(mijozlar)}
     </div>
     <div class="card debitor">
-      <div class="card-title">🏭 Ta'minotchilar ({len(taminotchilar)} ta)</div>
-      {_debtor_col_rows(taminotchilar)}
+      <div class="card-title">🏭 Ta'minotchilar ({t_count} ta)</div>
+      {_taminot_col_rows(taminot_avans, taminot_qarz)}
     </div>
   </div>
   <div class="date">Oxirgi yangilanish: {time_str}</div>
@@ -533,15 +539,15 @@ def main():
     print(f"   {len(mahsulotlar)} ta qator")
 
     print("👥 Debitorlar o'qilmoqda...")
-    d_summary, d_mijozlar, d_taminotchilar = read_debitorlar(TAB_DEBITORLAR)
-    print(f"   {len(d_summary)} xulosa + {len(d_mijozlar)} mijoz + {len(d_taminotchilar)} ta'minotchi")
+    d_summary, d_mijozlar, d_t_avans, d_t_qarz = read_debitorlar(TAB_DEBITORLAR)
+    print(f"   {len(d_summary)} xulosa + {len(d_mijozlar)} mijoz + {len(d_t_avans)} avans + {len(d_t_qarz)} qarz")
 
     print("🖼  HTML generatsiya qilinmoqda...")
     html1 = generate_balans_html(balans, time_str)
     html2 = generate_table_html(
         "Mahsulotlar hisoboti", "Omborxona · Yo'ldagilar",
         "📦", "mahsulot", mahsulotlar, time_str)
-    html3 = generate_debitorlar_html(d_summary, d_mijozlar, d_taminotchilar, time_str)
+    html3 = generate_debitorlar_html(d_summary, d_mijozlar, d_t_avans, d_t_qarz, time_str)
 
     print("📸 Screenshots olinmoqda...")
     paths = [take_screenshot(h) for h in [html1, html2, html3]]
