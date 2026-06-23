@@ -131,9 +131,10 @@ def read_debitorlar(tab: str) -> tuple[list[dict], list[tuple], list[tuple], lis
                     "value": val,
                     "group": current_group,
                 })
-        else:
-            for col_idx, target in [(4, mijozlar), (6, mijozlar),
-                                    (8, taminot_avans), (10, taminot_qarz)]:
+
+        # Debitor juftlarini BARCHA qatorlardan o'qi (S/T/G bilan bir qatorda ham bo'lishi mumkin)
+        for col_idx, target in [(4, mijozlar), (6, mijozlar),
+                                (8, taminot_avans), (10, taminot_qarz)]:
                 name = row[col_idx].strip() if col_idx < len(row) else ""
                 val  = row[col_idx + 1].strip() if col_idx + 1 < len(row) else ""
                 if name and val:
@@ -461,18 +462,18 @@ def generate_mahsulotlar_html(items: list[dict], sotilganlar: dict,
   </div>
   <div class="two-col">
     <div class="card sotilgan">
-      <div class="card-title">🚂 Sotilmaganlar</div>
+      <div class="card-title">🚂 Sotilganlar</div>
       {_group_col_html(sotilganlar)}
       <div class="card-footer">
-        <span class="footer-label">Jami sotilmagan</span>
+        <span class="footer-label">Jami sotilgan</span>
         <span class="footer-total">{to_str(s_total)}</span>
       </div>
     </div>
     <div class="card sotilmagan">
-      <div class="card-title">📦 Sotilganlar</div>
+      <div class="card-title">📦 Sotilmaganlar</div>
       {_group_col_html(sotilmaganlar)}
       <div class="card-footer">
-        <span class="footer-label">Jami sotilgan</span>
+        <span class="footer-label">Jami sotilmagan</span>
         <span class="footer-total">{to_str(ns_total)}</span>
       </div>
     </div>
